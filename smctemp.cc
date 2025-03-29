@@ -25,6 +25,7 @@
 #include <IOKit/IOKitLib.h>
 #include <libkern/OSAtomic.h>
 #include <sys/stat.h>
+#include <os/lock.h>
 
 #include <cerrno>
 #include <cmath>
@@ -62,7 +63,8 @@ struct {
 } g_keyInfoCache[KEY_INFO_CACHE_SIZE];
 
 int g_keyInfoCacheCount = 0;
-OSSpinLock g_keyInfoSpinLock = 0;
+// Use os_unfair_lock instead of deprecated OSSpinLock
+os_unfair_lock g_keyInfoSpinLock = OS_UNFAIR_LOCK_INIT;
 
 void printFLT(SmcVal_t val) {
   std::ios_base::fmtflags f(std::cout.flags());
@@ -154,7 +156,8 @@ SmcAccessor::~SmcAccessor() {
 
 kern_return_t SmcAccessor::Open() {
   mach_port_t masterPort;
-  IOMasterPort(MACH_PORT_NULL, &masterPort);
+  // Use kIOMainPortDefault instead of deprecated IOMasterPort
+  masterPort = kIOMainPortDefault;
   CFMutableDictionaryRef matchingDictionary = IOServiceMatching(kIOAppleSmcHiddenClassName);
 
   io_iterator_t iterator;
@@ -215,7 +218,7 @@ kern_return_t SmcAccessor::GetKeyInfo(const uint32_t key, SmcKeyData_keyInfo_t& 
   SmcKeyData_t outputStructure;
   kern_return_t result = kIOReturnSuccess;
 
-  OSSpinLockLock(&g_keyInfoSpinLock);
+  os_unfair_lock_lock(&g_keyInfoSpinLock);
   int i = 0;
   for (i = 0; i < g_keyInfoCacheCount; ++i) {
     if (key == g_keyInfoCache[i].key) {
@@ -243,7 +246,7 @@ kern_return_t SmcAccessor::GetKeyInfo(const uint32_t key, SmcKeyData_keyInfo_t& 
     }
   }
 
-  OSSpinLockUnlock(&g_keyInfoSpinLock);
+  os_unfair_lock_unlock(&g_keyInfoSpinLock);
 
   return result;
 }
@@ -327,7 +330,7 @@ kern_return_t SmcAccessor::ReadSmcVal(const UInt32Char_t key, SmcVal_t& val) {
   memset(&val, 0, sizeof(SmcVal_t));
 
   inputStructure.key = string_util::strtoul(key, 4, 16);
-  snprintf(val.key, sizeof(val.key), key);
+  snprintf(val.key, sizeof(val.key), "%s", key);
 
   result = GetKeyInfo(inputStructure.key, outputStructure.keyInfo);
   if (result != kIOReturnSuccess) {
