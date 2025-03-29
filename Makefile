@@ -1,5 +1,6 @@
 CXX := g++
-CXXFLAGS := -Wall -std=c++17 -g -framework IOKit
+CXXFLAGS := -Wall -std=c++17 -g
+LDFLAGS := -framework IOKit
 EXES := smctemp
 STATIC_LIB := libsmctemp.a
 DEST_PREFIX := /usr/local
@@ -32,7 +33,7 @@ HEADERS := smctemp.h \
 all: $(EXES)
 
 $(EXES): $(OBJS) main.cc
-	$(CXX) $(CXXFLAGS) -o $(EXES) $(OBJS) main.cc
+	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $(EXES) $(OBJS) main.cc
 
 staticlib: $(OBJS)
 	$(RM) $(STATIC_LIB)
